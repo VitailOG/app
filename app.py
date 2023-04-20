@@ -1,3 +1,5 @@
+import requests
+
 from flask import Flask, render_template, request
 
 app = Flask(__name__)
@@ -8,7 +10,12 @@ app = Flask(__name__)
 
 @app.route('/')
 def hello_world():
-    print(request.remote_addr)
+    print(
+        requests.get(
+            f'http://api.ipapi.com/api/{request.remote_addr}?access_key={"65df7c82ddb887fad4c61c3fb1459039"}'
+        ).json()
+    )
+
     return render_template('index.html', name="Vitalik")
 
 
