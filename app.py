@@ -1,5 +1,7 @@
 import requests
 
+from geopy.distance import geodesic
+
 from flask import Flask, render_template, request
 
 app = Flask(__name__)
@@ -23,9 +25,13 @@ def hello_world():
     ).json()
 
     u_lon, u_lat = r['latitude'], r['longitude']
-    print(u_lon, u_lat)
+    print((u_lon, u_lat))
     print()
     print((50.110924, 8.682127))
+    print()
+    print(
+        geodesic((u_lon, u_lat), (50.110924, 8.682127)).km
+    )
     return render_template('index.html', name="Vitalik")
 
 
