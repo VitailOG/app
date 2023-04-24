@@ -54,6 +54,7 @@ def get_near_vps(ip: IPv4Address) -> NearVPSResponse:
             )
         )
     near_vps = sorted(distances, key=op.attrgetter('distance'))[0]
+
     return NearVPSResponse(
         vps=near_vps,
         vps_info=VPSInfo(**VPS_SERVERS[near_vps.server_name])
