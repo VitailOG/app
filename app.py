@@ -1,38 +1,75 @@
+import io
+import os
+import time
+from datetime import datetime
+
 import requests
+from flask import Flask, jsonify, render_template, request, send_file, make_response
 
-from geopy.distance import geodesic
-
-from flask import Flask, render_template, request
+import ftp
+from config import ADDRESS_BACKEND, CHUNK_SIZE
+from fetcher import get_near_vps
 
 app = Flask(__name__)
-# u = 'http://chi.download.datapacket.com/100mb.bin'
-# ip = "5.58.55.183"
-# print(requests.get(f'http://api.ipapi.com/api/{ip}?access_key={"65df7c82ddb887fad4c61c3fb1459039"}').json())
-
-VPS_SERVERS = {
-    "VPS1": {
-        "city": "Frankfurt",
-        "longitude": 50.110924,
-        "latitude": 8.682127,
-    }
-}
 
 
 @app.route('/')
-def hello_world():
-    r = requests.get(
-        f'http://api.ipapi.com/api/{request.remote_addr}?access_key={"65df7c82ddb887fad4c61c3fb1459039"}'
-    ).json()
-
-    u_lon, u_lat = r['latitude'], r['longitude']
-    print((u_lon, u_lat))
-    print()
-    print((50.110924, 8.682127))
-    print()
-    print(
-        geodesic((u_lon, u_lat), (50.110924, 8.682127)).km
-    )
+def home():
     return render_template('index.html', name="Vitalik")
+
+
+@app.route('/', methods=['POST'])
+def upload():
+    start = time.process_time_ns()
+    ip_addr = request.remote_addr
+    print(ip_addr)
+    near_vps = get_near_vps(ip_addr)
+
+    url = request.get_json()['link']
+    filename = os.path.basename(url)
+
+    response = requests.get(url, stream=True)
+
+    file_buffer = io.BytesIO()
+
+    for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+        file_buffer.write(chunk)
+    file_buffer.seek(0)
+
+    ftp.upload(filename=filename, vps=near_vps.vps_info, buffer=file_buffer)
+    print('finish')
+    return jsonify(
+        {
+            "duration": (time.process_time_ns() - start) / 1_000_000_000,
+            "link": f"http://{ADDRESS_BACKEND}/download/" + filename,
+            "vps": near_vps.vps.server_name,
+            "city": near_vps.vps_info.city,
+            "ip": near_vps.vps_info.ip,
+            "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        }
+    )
+
+
+@app.route('/download/<name>', methods=['POST'])
+def download(name):
+    start = time.process_time_ns()
+    ip_addr = request.remote_addr
+    print(ip_addr)
+
+    near_vps = get_near_vps(ip_addr)
+    file_buffer = ftp.download(name, near_vps.vps_info)
+    file_buffer.seek(0)
+    response = make_response(send_file(file_buffer, as_attachment=True, download_name=name))
+
+    message = f"`VPS - {near_vps.vps.server_name}, " \
+              f"City - {near_vps.vps_info.city}, " \
+              f"ip - {near_vps.vps_info.ip}, " \
+              f"duration - {(time.process_time_ns() - start) / 1_000_000_000}, " \
+              f"created at - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}`"
+
+    response.headers['X-Message'] = message
+    print('finish')
+    return response
 
 
 if __name__ == '__main__':
